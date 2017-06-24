@@ -13,7 +13,7 @@ class Push extends Base {
 	 *
 	 * @throws \Exception
 	 */
-	public function sendMessage($channelOrUsername, $usernameForMention, $message) {
+	public function sendMessage($channelOrUsername, $usernameForMention, $message,$thread="") {
 		// if the channelOrUsername is set to null, then do not send the message
 		if(!$channelOrUsername) {
 			return;
@@ -32,14 +32,17 @@ class Push extends Base {
 			// NOTE: We assume it to be a channel name
 			$channelId = $this->getChannelIdFromChannelName($channelOrUsername);
 		}
-
-		$usernameToSend = $this->getUserIdFromUserName($usernameForMention);
-		if(!$usernameToSend) {
+		if(is_array($usernameForMention)):
+			$usernameToSend = $this->getUserIdFromUserNameArray($usernameForMention);
+		else:
+			$usernameToSend = $this->getUserIdFromUserName($usernameForMention);
+		endif;
+		if(!$usernameToSend||$usernameToSend=="") {
 			$usernameToSend = null;
 		}
 
 		if ($channelId) {
-			$this->send($channelId, $usernameToSend, $message);
+			$this->send($channelId, $usernameToSend, $message,$thread);
 		} else {
 			throw new \Exception('Cannot resolve channel ID to to send the message');
 		}

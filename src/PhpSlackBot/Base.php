@@ -6,6 +6,9 @@ abstract class Base {
     private $client;
     private $user;
     private $context;
+    private $thread;
+    private $ts;
+    private $id;
     private $mentionOnly = false;
     private $channel;
     abstract protected function configure();
@@ -31,6 +34,12 @@ abstract class Base {
     public function setName($name) {
         $this->name = $name;
     }
+    public function setThread($thread) {
+        $this->thread = $thread;
+    }
+    public function setTs($ts) {
+        $this->ts = $ts;
+    }
 
     public function setClient($client) {
         $this->client = $client;
@@ -47,6 +56,23 @@ abstract class Base {
     public function getCurrentUser() {
         return $this->user;
     }
+    public function getThread() {
+        return $this->thread;
+    }
+    public function getThreadOrTs() {
+	$thread=$this->getThread();
+	if(strlen($thread)>0):
+	    return $thread;
+	else:
+	    return $this->getTs();
+	endif;
+    }
+    public function getTs() {
+        return $this->ts;
+    }
+    public function getId() {
+        return $this->id;
+    }
 
     public function setContext($context) {
         $this->context = $context;
@@ -60,13 +86,23 @@ abstract class Base {
         return $this->channel;
     }
 
-    protected function send($channel, $username, $message) {
+    protected function send($channel, $username, $message,$thread="") {
+        $id=time().rand(10,99);
+	$this->id=$id;
+	if(is_array($username)):
+		$userOut=implode('',$username);
+	else:
+		$userOut=(!is_null($username) ? ($username[0]=="!"?"<$username> ":'<@'.$username.'> ') : '');
+	endif;
         $response = array(
-                          'id' => time(),
+                          'id' => $id,
                           'type' => 'message',
                           'channel' => $channel,
-                          'text' => (!is_null($username) ? '<@'.$username.'> ' : '').$message
+                          'text' => $userOut.$message
                           );
+	if($thread!=""):
+            $response['thread_ts'] = $thread;
+	endif;
         $this->client->send(json_encode($response));
     }
 
@@ -88,10 +124,32 @@ abstract class Base {
 				$userId = $user['id'];
 			}
 		}
+		if($userName=="channel"||$username=="everyone"||$username=="here"||$username=="group"):
+			$userId="!$userName";
+		endif;
 		return $userId;
 	}
+	protected function getUserIdFromUserNameArray($userNames) {
+		$userId = '';
+		static $Ids;
+		foreach ($this->context['users'] as $user) {
+			$Ids[$user['name']]=$user['id'];
+		}
+		foreach($userNames as $userName){
+			$userName = str_replace('@', '', $userName);
+			if($userName=="channel"||$username=="everyone"||$username=="here"||$username=="group"):
+				$userId="<!$userName>";
+			elseif(isset($Ids[$userName])):
+				$userId='<@'.$Ids[$userName].'> ';
+			else:
+				$userId='';
+			endif;
+			$out[]=$userId;
+		}
+		return $out;
+	}
 
-    protected function getChannelIdFromChannelName($channelName) {
+    public function getChannelIdFromChannelName($channelName) {
         $channelName = str_replace('#', '', $channelName);
         foreach ($this->context['channels'] as $channel) {
             if ($channel['name'] == $channelName) {

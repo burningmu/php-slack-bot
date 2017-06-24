@@ -8,12 +8,16 @@ class Bot {
     private $wsUrl;
     private $commands = array();
     private $webhooks = array();
+    private $id2ts = array();
     private $webserverPort = null;
     private $webserverAuthentificationToken = null;
     private $catchAllCommands = array();
     private $pushNotifiers = array();
     private $activeMessenger = null;
 
+    public function resetPush(){
+	$pushNotifiers = array();
+    }
     public function setToken($token) {
         $this->params = array('token' => $token);
     }
@@ -57,7 +61,9 @@ class Bot {
 		    throw new \Exception('Closure passed as push notifier is not callable.');
 	    }
     }
-
+    public function getTsFromId($id){
+	return $this->id2ts[$id];
+    }
     public function run() {
         if (!isset($this->params['token'])) {
             throw new \Exception('A token must be set. Please see https://my.slack.com/services/new/bot');
@@ -86,7 +92,12 @@ class Bot {
             $data = $message->getData();
             $logger->notice("Got message: ".$data);
             $data = json_decode($data, true);
-
+	    if(isset($data['reply_to'])):
+		if(isset($this->commands["IDCommand"])):
+			$this->commands["IDCommand"]->setTS($data['reply_to'],$data['ts']);
+		endif;
+		$this->id2ts[$data['reply_to']]=$data['ts'];
+	    endif;
             if (count($this->catchAllCommands)) {
               foreach ($this->catchAllCommands as $command) {
                 $command->setClient($client);
@@ -103,6 +114,14 @@ class Bot {
                 if (isset($data['user'])) {
                     $command->setUser($data['user']);
                 }
+                if (isset($data['ts'])) {
+                    $command->setTs($data['ts']);
+                }
+                if (isset($data['thread_ts'])) {
+                    $command->setThread($data['thread_ts']);
+                } else {
+                    $command->setThread('');
+		}
                 $command->setContext($this->context);
                 $command->executeCommand($data, $this->context);
             }
@@ -153,14 +172,18 @@ class Bot {
 	    		$loop->addPeriodicTimer($notifierArray['interval'], function () use ($notifierArray) {
 	    			if($this->activeMessenger instanceof ActiveMessenger\Push) {
 					    $resultArray = call_user_func($notifierArray['method']);
-					    $this->activeMessenger->sendMessage($resultArray['channel'], $resultArray['username'], $resultArray['message']);
+					    if(is_array($resultArray)):
+					        $this->activeMessenger->sendMessage($resultArray['channel'], $resultArray['username'], $resultArray['message'], $resultArray['thread']);
+					    endif;
 				    }
 			    });
 		    } else {
 			    $loop->addTimer(10, function () use ($notifierArray) {
 				    if($this->activeMessenger instanceof ActiveMessenger\Push) {
 					    $resultArray = call_user_func($notifierArray['method']);
-					    $this->activeMessenger->sendMessage($resultArray['channel'], $resultArray['username'], $resultArray['message']);
+					    if(is_array($resultArray)):
+					        $this->activeMessenger->sendMessage($resultArray['channel'], $resultArray['username'], $resultArray['message'], $resultArray['thread']);
+					    endif;
 				    }
 			    });
 		    }
